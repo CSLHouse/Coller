@@ -2,7 +2,11 @@ package example
 
 import (
 	"errors"
+	"fmt"
+	"github.com/bwmarrin/snowflake"
+	"go.uber.org/zap"
 	"mime/multipart"
+	"strconv"
 	"strings"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
@@ -17,8 +21,8 @@ import (
 //@param: file model.ExaFileUploadAndDownload
 //@return: error
 
-func (e *FileUploadAndDownloadService) Upload(file example.ExaFileUploadAndDownload) error {
-	return global.GVA_DB.Create(&file).Error
+func (e *FileUploadAndDownloadService) Upload(file *example.ExaFileUploadAndDownload) error {
+	return global.GVA_DB.Create(file).Error
 }
 
 //@author: [piexlmax](https://github.com/piexlmax)
@@ -33,6 +37,12 @@ func (e *FileUploadAndDownloadService) FindFile(id int) (example.ExaFileUploadAn
 	return file, err
 }
 
+func (e *FileUploadAndDownloadService) FindFileByFileId(fileId int64) (example.ExaFileUploadAndDownload, error) {
+	var file example.ExaFileUploadAndDownload
+	err := global.GVA_DB.Where("file_id = ?", fileId).First(&file).Error
+	return file, err
+}
+
 //@author: [piexlmax](https://github.com/piexlmax)
 //@function: DeleteFile
 //@description: 删除文件记录
@@ -41,7 +51,15 @@ func (e *FileUploadAndDownloadService) FindFile(id int) (example.ExaFileUploadAn
 
 func (e *FileUploadAndDownloadService) DeleteFile(file example.ExaFileUploadAndDownload) (err error) {
 	var fileFromDb example.ExaFileUploadAndDownload
-	fileFromDb, err = e.FindFile(file.ID)
+	s := strings.Split(file.Url, "/")
+	fileName := s[len(s)-1]
+	fileIdL := strings.Split(fileName, "_")
+	fileId, err := strconv.ParseInt(fileIdL[0], 10, 64)
+	if err != nil {
+		return err
+	}
+
+	fileFromDb, err = e.FindFileByFileId(fileId)
 	if err != nil {
 		return
 	}
@@ -50,6 +68,22 @@ func (e *FileUploadAndDownloadService) DeleteFile(file example.ExaFileUploadAndD
 		return errors.New("文件删除失败")
 	}
 	err = global.GVA_DB.Where("id = ?", file.ID).Unscoped().Delete(&file).Error
+	return err
+}
+
+func (e *FileUploadAndDownloadService) DeleteFiles(files []string) (err error) {
+	var filesPathList []string
+	for _, file := range files {
+		// TODO: 截取绝对路径
+		filesPathList = append(filesPathList, file)
+	}
+
+	oss := upload.NewOss()
+	if err = oss.DeleteFiles(filesPathList); err != nil {
+		return errors.New("文件删除失败")
+	}
+	var file example.ExaFileUploadAndDownload
+	err = global.GVA_DB.Where("id in ?", file.ID).Unscoped().Delete(&file).Error
 	return err
 }
 
@@ -65,20 +99,20 @@ func (e *FileUploadAndDownloadService) EditFileName(file example.ExaFileUploadAn
 //@param: info request.PageInfo
 //@return: list interface{}, total int64, err error
 
-func (e *FileUploadAndDownloadService) GetFileRecordInfoList(info request.PageInfo) (list interface{}, total int64, err error) {
+func (e *FileUploadAndDownloadService) GetFileRecordInfoList(info request.PageInfo, userId int) (list interface{}, total int64, err error) {
 	limit := info.PageSize
 	offset := info.PageSize * (info.Page - 1)
 	keyword := info.Keyword
 	db := global.GVA_DB.Model(&example.ExaFileUploadAndDownload{})
 	var fileLists []example.ExaFileUploadAndDownload
 	if len(keyword) > 0 {
-		db = db.Where("name LIKE ?", "%"+keyword+"%")
+		db = db.Where("name LIKE ? and sys_user_id = ?", "%"+keyword+"%", userId)
 	}
 	err = db.Count(&total).Error
 	if err != nil {
 		return
 	}
-	err = db.Limit(limit).Offset(offset).Order("updated_at desc").Find(&fileLists).Error
+	err = db.Limit(limit).Offset(offset).Where("sys_user_id = ?", userId).Order("updated_at desc").Find(&fileLists).Error
 	return fileLists, total, err
 }
 
@@ -88,21 +122,43 @@ func (e *FileUploadAndDownloadService) GetFileRecordInfoList(info request.PageIn
 //@param: header *multipart.FileHeader, noSave string
 //@return: file model.ExaFileUploadAndDownload, err error
 
-func (e *FileUploadAndDownloadService) UploadFile(header *multipart.FileHeader, noSave string) (file example.ExaFileUploadAndDownload, err error) {
+func (e *FileUploadAndDownloadService) UploadFile(header *multipart.FileHeader, noSave string, userId int) (file example.ExaFileUploadAndDownload, err error) {
+	n, err := snowflake.NewNode(1)
+	if err != nil {
+		global.GVA_LOG.Error("创建id失败!", zap.Error(err))
+	}
+	uuid := n.Generate()
+	fileName := uuid.String()
+	header.Filename = fileName + "_" + header.Filename
 	oss := upload.NewOss()
-	filePath, key, uploadErr := oss.UploadFile(header)
+	filePath, key, uploadErr := oss.UploadFile(header, userId)
 	if uploadErr != nil {
 		panic(err)
 	}
+
 	s := strings.Split(header.Filename, ".")
 	f := example.ExaFileUploadAndDownload{
-		Url:  filePath,
-		Name: header.Filename,
-		Tag:  s[len(s)-1],
-		Key:  key,
+		Url:       filePath,
+		Name:      header.Filename,
+		Tag:       s[len(s)-1],
+		Key:       key,
+		SysUserId: userId,
+		FileId:    uuid.Int64(),
 	}
 	if noSave == "0" {
-		return f, e.Upload(f)
+		err = e.Upload(&f)
+		fmt.Println(f)
+		return f, err
 	}
 	return f, nil
+}
+
+func (e *FileUploadAndDownloadService) CheckFile(fileName string, userId int) bool {
+	var file example.ExaFileUploadAndDownload
+	err := global.GVA_DB.Where("name = ? and sys_user_id = ?", fileName, userId).First(&file).Error
+	fmt.Println(err)
+	if err == nil {
+		return true
+	}
+	return false
 }

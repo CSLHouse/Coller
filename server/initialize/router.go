@@ -21,6 +21,7 @@ func Routers() *gin.Engine {
 	exampleRouter := router.RouterGroupApp.Example
 	businessRouter := router.RouterGroupApp.Business
 	wechatRouter := router.RouterGroupApp.Wechat
+	payRouter := router.RouterGroupApp.Pay
 	// 如果想要不使用nginx代理前端网页，可以修改 web/.env.production 下的
 	// VUE_APP_BASE_API = /
 	// VUE_APP_BASE_PATH = http://localhost
@@ -53,6 +54,7 @@ func Routers() *gin.Engine {
 		systemRouter.InitInitRouter(PublicGroup) // 自动初始化相关
 
 	}
+
 	PrivateGroup := Router.Group(global.GVA_CONFIG.System.RouterPrefix)
 	PrivateGroup.Use(middleware.JWTAuth()).Use(middleware.CasbinHandler()).Use(middleware.CasbinHandler())
 	{
@@ -74,12 +76,13 @@ func Routers() *gin.Engine {
 		exampleRouter.InitCustomerRouter(PrivateGroup)              // 客户路由
 		exampleRouter.InitFileUploadAndDownloadRouter(PrivateGroup) // 文件上传下载功能路由
 		businessRouter.InitComboRouter(PrivateGroup)                // 业务--套餐路由
-		businessRouter.InitMemberRouter(PrivateGroup)               // VIP会员路由
+		businessRouter.InitMemberRouter(PrivateGroup, PublicGroup)  // VIP会员路由
 		businessRouter.InitConsumeRouter(PrivateGroup)              // 会员消费路由
 		businessRouter.InitOrderRouter(PrivateGroup)                // 订单路由
 		wechatRouter.InitWechatRouter(PrivateGroup, PublicGroup)    // 小程序首页路由
 		wechatRouter.InitAccountRouter(PrivateGroup)                // 小程序账号路由
 		wechatRouter.InitOrderRouter(PrivateGroup)                  // 订单路由
+		payRouter.InitPayRouter(PrivateGroup)
 	}
 
 	global.GVA_LOG.Info("router register success")

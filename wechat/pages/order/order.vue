@@ -78,7 +78,7 @@
 			return {
 				tabCurrentIndex: 0,
 				orderParam: {
-					status: -1,
+					state: -1,
 					page: 1,
 					pageSize: 5
 				},
@@ -146,7 +146,9 @@
 				return statusTip;
 			},
 			formatProductAttr(jsonAttr) {
-				let attrArr = JSON.parse(jsonAttr);
+				// console.log("--[formatProductAttr]-jsonAttr:", jsonAttr)
+				// let attrArr = JSON.parse(jsonAttr);
+				let attrArr = jsonAttr;
 				let attrStr = '';
 				for (let attr of attrArr) {
 					attrStr += attr.key;
@@ -180,10 +182,10 @@
 					//防止重复加载
 					return;
 				}
-				this.orderParam.status = navItem.state;
+				this.orderParam.state = state;
 				this.loadingType = 'loading';
 				fetchOrderList(this.orderParam).then(response => {
-					console.log("--fetchOrderList--", response)
+					// console.log("--fetchOrderList--", response)
 					if (response.code == 0) {
 						let list = response.data.list;
 						if(type=='refresh'){
@@ -226,7 +228,7 @@
 				            	superThis.loadData();
 				            });
 				        } else if (res.cancel) {
-				            console.log('用户点击取消');
+				            // console.log('用户点击取消');
 				        }
 				    }
 				});
@@ -247,7 +249,7 @@
 				            	superThis.loadData();
 				            });
 				        } else if (res.cancel) {
-				            console.log('用户点击取消');
+				            // console.log('用户点击取消');
 				        }
 				    }
 				});
@@ -255,7 +257,7 @@
 			//支付订单
 			payOrder(orderId){
 				uni.redirectTo({
-					url: `/pages/money/pay?orderId=${orderId}`
+					url: `/pages/order/orderDetail?orderId=${orderId}`
 				});
 			},
 			//确认收货
@@ -274,7 +276,7 @@
 				            	superThis.loadData();
 				            });
 				        } else if (res.cancel) {
-				            console.log('用户点击取消');
+				            // console.log('用户点击取消');
 				        }
 				    }
 				});

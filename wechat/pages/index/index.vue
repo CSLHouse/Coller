@@ -12,8 +12,9 @@
 			<!-- 标题栏和状态栏占位符 -->
 			<view class="titleNview-placing"></view>
 			<!-- 背景色区域 -->
-			<view class="titleNview-background" :style="{backgroundColor:titleNViewBackground}"></view>
-			<swiper class="carousel" circular @change="swiperChange">
+			<view class="titleNview-background"></view>
+			<swiper class="carousel" circular indicator-dots autoplay :interval="5000"
+				:duration="500" >
 				<swiper-item v-for="(item, index) in advertiseList" :key="index" class="carousel-item" @click="navToAdvertisePage(item)">
 					<image :src="item.pic" />
 				</swiper-item>
@@ -26,7 +27,7 @@
 			</view>
 		</view>
 		<!-- 头部功能区 -->
-		<view class="cate-section">
+		<!-- <view class="cate-section">
 			<view class="cate-item">
 				<image src="/static/temp/c3.png"></image>
 				<text>专题</text>
@@ -43,7 +44,7 @@
 				<image src="/static/temp/c7.png"></image>
 				<text>特惠</text>
 			</view>
-		</view>
+		</view> -->
 
 		<!-- 品牌制造商直供 -->
 		<!-- <view class="f-header m-t" @click="navToRecommendBrandPage()">
@@ -161,34 +162,52 @@
 			</view>
 		</view>
 		<uni-load-more :status="loadingType"></uni-load-more>
-		<view v-if='!isCloseModel'>
-			<login-pop @close='handleClose' @success='handleShowLoginModel'></login-pop>
+		
+		<view v-if='!hasLogin && !isCloseModel' >
+			<div class="modal-mask" @click="closePop">
+			</div>
+			<div class="modal-dialog">
+			  <div class="modal-content">
+			    <image class="img" src="/static/pop.jpg"></image>
+			    <div class="content-text">
+			      <p class="key-bold-tip">注册会员</p>
+			      <p class="key-bold">注册成为会员享受更多优惠</p>
+			      <p class="little-tip">我们的生活圈：</p>
+			      <p class="little-content">
+			        注册成为会员，一店消费，多家优惠，欢迎体验
+			      </p>
+			    </div>
+			  </div>
+			  <div class="modal-footer">
+			    <button class='btn' open-type='getPhoneNumber' @getphonenumber="decryptPhoneNumber">
+			    	一键注册
+			    </button>
+			  </div>
+			</div>
 		</view>
 	</view>
 </template>
 
 <script>
 	import {
-	    mapState 
+	    mapState, mapMutations
 	} from 'vuex';
 	import {
 		fetchContent,
 		fetchRecommendProductList
 	} from '@/api/home.js';
+	import { getWXPhoneNumber, wxRefreshLogin, WXResetNickName } from '@/api/member.js';
 	import {
 		formatDate
 	} from '@/utils/date';
 	import uniLoadMore from '@/components/uni-load-more/uni-load-more.vue';
-	import loginPop from '@/components/login-pop.vue';
 	export default {
 		components: {
 			uniLoadMore,
-			loginPop
 		},
 		data() {
 			return {
 				titleNViewBackground: '',
-				titleNViewBackgroundList: ['rgb(203, 87, 60)', 'rgb(205, 215, 218)'],
 				swiperCurrent: 0,
 				swiperLength: 0,
 				carouselList: [],
@@ -197,7 +216,7 @@
 				brandList: [],
 				homeFlashPromotion: [],
 				newProductList: [],
-				hotProductList: [],
+				// hotProductList: [],
 				recommendProductList: [],
 				recommendParams: {
 					page: 1,
@@ -205,10 +224,14 @@
 				},
 				loadingType:'more',
 				isCloseModel: false,
+				isCloseNickNameModel: false,
+				nickName: '',
 			};
 		},
 		onLoad() {
 			this.loadData();
+		},
+		onShow() {
 		},
 		//下拉刷新
 		onPullDownRefresh(){
@@ -221,8 +244,7 @@
 			this.loadingType = 'loading';
 			fetchRecommendProductList(this.recommendParams).then(response => {
 				let addProductList = response.data.list;
-				console.log("-addProductList--", addProductList)
-				if(response.data.list.length===0){
+				if(!response.data.list){
 					//没有更多了
 					this.recommendParams.page;
 					this.loadingType = 'nomore';
@@ -264,45 +286,112 @@
 			},
 		},
 		methods: {
-			handleClose(e) {
-				this.isCloseModel = e
+			...mapMutations(['login', 'refreshLoginSession']),
+			getNickname(e) {
+				this.nickName = e.detail.value
 			},
-			handleShowLoginModel(e) {
-				console.log("-------------e:", e)
-				this.isCloseModel = e
+			checkNickName() {
+				if (!this.nickName) {
+					uni.showToast({
+						title: '请输入昵称',
+						icon: 'none'
+					})
+					return false
+				}
+				let str = this.nickName.trim();
+				if (str.length == 0) {
+					uni.showToast({
+						title: '请输入正确的昵称',
+						icon: 'none'
+					})
+					return false
+				}
+				this.nickName = str
+				return true
+			},
+						
+			confirmNickName() {
+				let _this = this
+				if (this.$store.state.userInfo) {
+					_this.$store.state.userInfo.nickName = this.nickName
+					WXResetNickName(this.$store.state.userInfo).then(res=>{
+						if (res.code == 0) {
+							uni.showToast({ title: '设置成功', duration: 2000 })
+							_this.$store.state.hadNickName = true
+							uni.setStorage({//缓存用户登陆状态
+							    key: 'UserInfo',
+							    data: _this.$store.state.userInfo  
+							})
+							_this.isCloseNickNameModel = true
+						}
+						else {
+							uni.showToast({ title: '设置失败', duration: 2000 })
+						}
+					});
+				}
+				
+			},	
+			closePop() {
+				this.isCloseModel = true
+			},
+			closeNickNamePop() {
+				this.isCloseNickNameModel = true
+			},
+			decryptPhoneNumber: function(e) {
+				let _this = this
+				if(e.detail.errMsg == "getPhoneNumber:ok"){
+					if (_this.$store.state.openId && _this.$store.state.openId.length > 0) {
+						getWXPhoneNumber({openId: _this.$store.state.openId, code: e.detail.code}).then(res=>{
+							if (res.code == 0) {
+								uni.showToast({ title: '注册成功', duration: 2000 })
+								_this.getToken()
+							}
+							else {
+								uni.showToast({ title: '注册会员失败', duration: 2000 })
+							}
+						});
+					}
+				}
+			},
+			getToken() {
+				let _this = this
+				wxRefreshLogin({openId: _this.$store.state.openId}).then(res => {
+					if (res.code == 0) {
+						const userinfo = res.data
+						wx.setStorageSync("Token", userinfo.token)
+						wx.setStorageSync("TokenTime", userinfo.expiresAt)
+						_this.$store.state.token = userinfo.token
+						this.login(userinfo.customer);
+					}
+				}).catch(errors => {
+					uni.showModal({
+						title:'提示',
+						content:'网络错误',
+						showCancel:false
+					})
+				});
 			},
 			/**
 			 * 加载数据
 			 */
 			async loadData() {
 				fetchContent().then(response => {
-					console.log("onLoad", response.data);
 					this.advertiseList = response.data.advertiseList;
 					this.swiperLength = this.advertiseList.length;
-					this.titleNViewBackground = this.titleNViewBackgroundList[0];
 					this.brandList = response.data.brandList;
-					
 					this.homeFlashPromotion = response.data.homeFlashPromotion;
 					
 					this.newProductList = response.data.newProductList;
-					this.hotProductList = response.data.hotProductList;
+					// this.hotProductList = response.data.hotProductList;
 					fetchRecommendProductList(this.recommendParams).then(response => {
 						this.recommendProductList = response.data.list;
-						console.log("this.recommendProductList", this.recommendProductList);
 						uni.stopPullDownRefresh();
 					})
 				});
 			},
-			//轮播图切换修改背景色
-			swiperChange(e) {
-				const index = e.detail.current;
-				this.swiperCurrent = index;
-				let changeIndex = index % this.titleNViewBackgroundList.length;
-				this.titleNViewBackground = this.titleNViewBackgroundList[changeIndex];
-			},
+			
 			//商品详情页
 			navToDetailPage(item) {
-				console.log("---item:", item)
 				let id = item.id;
 				uni.navigateTo({
 					url: `/pages/product/product?id=${id}`
@@ -311,7 +400,6 @@
 			//广告详情页
 			navToAdvertisePage(item) {
 				let id = item.id;
-				console.log("navToAdvertisePage",item)
 				uni.navigateTo({
 					url: item.url
 				})
@@ -336,11 +424,11 @@
 				})
 			},
 			//人气推荐列表页
-			navToHotProudctListPage() {
-				uni.navigateTo({
-					url: `/pages/product/hotProductList`
-				})
-			},
+			// navToHotProudctListPage() {
+			// 	uni.navigateTo({
+			// 		url: `/pages/product/hotProductList`
+			// 	})
+			// },
 		},
 		// #ifndef MP
 		// 标题栏input搜索框点击
@@ -436,7 +524,7 @@
 	.carousel-section {
 		position: relative;
 		padding-top: 10px;
-
+		margin-bottom: 10px;
 		.titleNview-placing {
 			height: var(--status-bar-height);
 			padding-top: 44px;
@@ -757,13 +845,13 @@
 		flex-wrap: wrap;
 		padding: 0 30upx;
 		background: #fff;
-
+		
 		.guess-item {
 			display: flex;
 			flex-direction: column;
 			width: 48%;
 			padding-bottom: 40upx;
-
+			
 			&:nth-child(2n+1) {
 				margin-right: 4%;
 			}
@@ -787,7 +875,9 @@
 			height: 150upx;
 			border-radius: 3px;
 			overflow: hidden;
-		
+			border-style:solid;
+			border-color: rgba(250, 250, 255, 0.9);
+			
 			image {
 				width: 100%;
 				height: 100%;
@@ -868,5 +958,110 @@
 			flex-direction: column;
 			padding-left: 40upx;
 		}
+	}
+	
+	.modal-mask {
+	  width: 100%;
+	  height: 100%;
+	  position: fixed;
+	  top: 0;
+	  left: 0;
+	  background: #000;
+	  opacity: 0.5;
+	  overflow: hidden;
+	  z-index: 9000;
+	  color: #fff;
+	}
+	.modal-dialog {
+	  box-sizing: border-box;
+	  width: 560rpx;
+	  overflow: hidden;
+	  position: fixed;
+	  top: 40%;
+	  left: 0;
+	  z-index: 9999;
+	  background: #fff;
+	  margin: -150rpx 95rpx;
+	  border-radius: 16rpx;
+	}
+	.modal-content {
+	  box-sizing: border-box;
+	  display: flex;
+	  padding: 0rpx 53rpx 50rpx 53rpx;
+	  font-size: 32rpx;
+	  align-items: center;
+	  justify-content: center;
+	  flex-direction: column;
+	}
+	.content-tip {
+	  text-align: center;
+	  font-size: 36rpx;
+	  color: #333333;
+	}
+	.content-text {
+	  /* height:230px; */
+	  padding:10px 0px 10px 0px;
+	  font-size:14px;
+	}
+	.modal-footer {
+	  box-sizing: border-box;
+	  display: flex;
+	  flex-direction: row;
+	  border-top: 1px solid #e5e5e5;
+	  font-size: 16px;
+	  font-weight:bold;
+	  /* height: 45px; */
+	  line-height: 45px;
+	  text-align: center;
+	  background:#feb600;
+	}
+	.btn {
+	  width: 100%;
+	  height: 100%;
+	  background:#feb600;
+	  color:#FFFFFF;
+	  font-weight:bold;
+	}
+	.img {
+	  width: 560rpx;
+	  height:140rpx;
+	}
+	.little-tip {
+	  padding-top:15px;
+	  padding-bottom:3px;
+	  font-size: 14px;
+	  font-weight:bold;
+	  color: #feb600;
+	}
+	.little-content {
+	  padding-top:5px;
+	  font-size: 13px;
+	  color:#606060;
+	}
+	.key-bold-tip {
+	  padding-top:5px;
+	  font-size: 15px;
+	  font-weight:bold;
+	  color: #feb600;
+	}
+	.key-bold {
+	  padding-top:5px;
+	  font-size: 14px;
+	  /* font-weight:bold; */
+	}
+	.info-bold-tip {
+		padding-top:5px;
+		font-size: 15px;
+		font-weight:bold;
+		color: #feb600;
+		text-align: center;
+	}
+	.weui-input {
+		margin-top: 40px;
+		// width: 200px;
+		height: 40px;
+		background: #f4f4f6;
+		line-height: 40px;
+		text-align: center;
 	}
 </style>

@@ -17,6 +17,9 @@ func (s *BaseRouter) InitBaseRouter(Router *gin.RouterGroup) (R gin.IRoutes) {
 		baseRouter.GET("wxUserInfo", baseApi.GetWXUserInfo)
 		baseRouter.POST("wxUserInfo", baseApi.CreateWXUserInfo)
 		baseRouter.POST("wxRefreshLogin", baseApi.WXRefreshLogin)
+		baseRouter.POST("phoneNumber", baseApi.ParsePhoneNumber)
+		baseRouter.GET("checkPhone", baseApi.CheckPhoneNumber)
+		baseRouter.POST("recordShare", baseApi.RecordShareScanAccount)
 	}
 	return baseRouter
 }

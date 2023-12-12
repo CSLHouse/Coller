@@ -128,7 +128,7 @@
 			},
 			navToLogin() {
 				uni.navigateTo({
-					url: '/pages/public/login'
+					url: '/pages/user/user'
 				})
 			},
 			//选中状态处理
@@ -148,7 +148,6 @@
 			//数量
 			numberChange(data) {
 				let cartItem = this.cartList[data.index];
-
 				updateQuantity({id:cartItem.id,quantity:data.number}).then(response=>{
 					cartItem.quantity = data.number;
 					this.calcTotal();
@@ -159,7 +158,7 @@
 				let list = this.cartList;
 				let row = list[index];
 				let id = row.id;
-				deletCartItem({id:id}).then(response=>{
+				deletCartItem({id: id}).then(response=>{
 					this.cartList.splice(index, 1);
 					this.calcTotal();
 					uni.hideLoading();
